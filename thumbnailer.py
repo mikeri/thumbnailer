@@ -1,3 +1,4 @@
+#!/usr/bin/python3
 import multiprocessing
 import configparser
 import subprocess
@@ -8,12 +9,25 @@ import pathlib
 import hashlib
 import os
 
-DESCR = "Generate thumbnails on demand."
-logging.basicConfig()
-LOG = logging.Logger("Thumbnailer")
+DESCR = """Generate thumbnails according to freedesktop.org specificaton"""
+FORMAT = "%(asctime)-15s %(message)s"
+logging.basicConfig(format=FORMAT)
+LOG = logging.getLogger("Thumbnailer")
 parser = argparse.ArgumentParser(description=DESCR)
-parser.add_argument("location", help="File or directory to process")
+parser.add_argument("-d", "--debug", action="store_true", help="show debugging info")
+parser.add_argument("-q", "--quiet", action="store_true", help="stay quiet")
+parser.add_argument(
+    "-s", "--skip", action="store_true", help="skip already exsisting thumbnails"
+)
+parser.add_argument("location", help="file or directory to process")
 args = parser.parse_args()
+
+if args.debug:
+    LOG.setLevel(logging.DEBUG)
+elif args.quiet:
+    LOG.setLevel(logging.CRITICAL)
+else:
+    LOG.setLevel(logging.INFO)
 
 
 class Thumbnailer:
@@ -36,9 +50,12 @@ class Thumbnailer:
             file_uri = pathlib.Path(file).as_uri()
             out_file_name = hashlib.md5(file_uri.encode("utf-8")).hexdigest() + ".png"
             out_path = f"/home/mikeri/.thumbnails/{size_dir}/" + out_file_name
-            args = self.exec.split(" ")
+            if args.skip and os.path.isfile(out_path):
+                LOG.info(f"Skipping existing {size_dir} thumbnail for {file}")
+                return False
+            exec_args = self.exec.split(" ")
             new_args = []
-            for arg in args:
+            for arg in exec_args:
                 arg = arg.replace("%i", file)
                 arg = arg.replace("%o", out_path)
                 arg = arg.replace("%s", str(size))
@@ -47,8 +64,22 @@ class Thumbnailer:
                 new_args.append(arg)
             return new_args
 
-        subprocess.run(execute(128, "normal"), stderr=subprocess.PIPE, stdout=subprocess.PIPE)
-        subprocess.run(execute(512, "large"), stderr=subprocess.PIPE, stdout=subprocess.PIPE)
+        sizes = [(128, "normal"), (512, "large")]
+        for size in sizes:
+            run_args = execute(size[0], size[1])
+            if run_args:
+                result = subprocess.run(
+                    run_args, stderr=subprocess.PIPE, stdout=subprocess.PIPE
+                )
+                if result.returncode == 0:
+                    LOG.info(f"Sucessfully generated {size[1]} thumbnail for {file}")
+                else:
+                    LOG.error(f"Generating {size[1]} thumbnail for {file} failed!")
+                    run_string = " ".join(run_args)
+                    LOG.debug(f"Attempted command: {run_string}")
+                    LOG.debug(
+                        f"Output from thumbnailer: {result.stdout} {result.stderr}"
+                    )
 
 
 def get_thumbnailers():
@@ -113,9 +144,9 @@ def main():
                 mime_type = get_mime_type(file_path)
                 try:
                     thumbnailers[mime_type].generate_thumbnails(file_path)
-                    print(f"Generated thumbnail for {file}.")
                 except KeyError:
-                    print(f"Skipped {file}, no thumbnailer found.")
+                    LOG.info(f"Skipped {file}, no thumbnailer found.")
 
 
-main()
+if __name__ == "__main__":
+    main()
