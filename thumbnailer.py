@@ -136,7 +136,10 @@ def main():
     thumbnailers = get_thumbnailers()
     if os.path.isfile(args.location):
         mime_type = get_mime_type(args.location)
-        thumbnailers[mime_type].generate_thumbnails(args.location)
+        try:
+            thumbnailers[mime_type].generate_thumbnails(args.location)
+        except KeyError:
+            LOG.info(f"Skipped {args.location}, no thumbnailer found.")
     else:
         for folder, subfolders, files in os.walk(args.location):
             for file in files:
