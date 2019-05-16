@@ -49,7 +49,7 @@ class Thumbnailer:
         def execute(size, size_dir):
             file_uri = pathlib.Path(file).as_uri()
             out_file_name = hashlib.md5(file_uri.encode("utf-8")).hexdigest() + ".png"
-            out_path = f"/home/mikeri/.thumbnails/{size_dir}/" + out_file_name
+            out_path = os.path.expanduser(f"~/.thumbnails/{size_dir}/") + out_file_name
             if args.skip and os.path.isfile(out_path):
                 LOG.info(f"Skipping existing {size_dir} thumbnail for {file}")
                 return False
